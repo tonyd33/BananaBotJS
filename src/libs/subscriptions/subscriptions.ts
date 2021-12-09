@@ -1,6 +1,4 @@
-import { Sequelize } from 'sequelize/dist';
-
-export interface Subscription {
+export interface SimpleSubscription {
   id: number;
   name: string;
   userIds: number[];
@@ -13,9 +11,9 @@ export interface Subscription {
  */
 export function querySubscriptions(
   query: string,
-  subscriptions: Subscription[],
+  subscriptions: SimpleSubscription[],
   options: {} = {}
-): Subscription[] {
+): SimpleSubscription[] {
   const regex = new RegExp(query, 'i');
   return subscriptions.filter((subscription) => {
     subscription.name.match(regex);
