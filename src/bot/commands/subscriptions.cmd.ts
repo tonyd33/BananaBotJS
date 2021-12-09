@@ -1,4 +1,5 @@
 import { Discord, Slash, SlashGroup, SlashOption } from 'discordx';
+import { UserSubscriptionError } from '../../libs/subscriptions/subscriptionsErrors';
 import {
   ApplicationCommandOptionChoice,
   AutocompleteInteraction,
@@ -20,20 +21,26 @@ class Subscriptions {
 
   // https://discord-ts.js.org/docs/decorators/commands/slashoption#autocomplete-option
   @Slash('subscribe')
-  subscribe(
+  async subscribe(
     @SlashOption('subscription', {
       autocomplete: autocompleteSubscriptions,
       type: 'STRING',
     })
     subscriptionId: string,
     interaction: CommandInteraction | AutocompleteInteraction
-  ): void {
+  ): Promise<void> {
     if (!interaction.isAutocomplete()) {
-      this.subscriptionsDatabase.subscribeUser({
-        userId: parseInt(interaction.member.user.id, 10),
-        subscriptionId: parseInt(subscriptionId, 10),
-      });
-      interaction.reply(`Subscribed!`);
+      try {
+        await this.subscriptionsDatabase.subscribeUser({
+          userId: parseInt(interaction.member.user.id, 10),
+          subscriptionId: parseInt(subscriptionId, 10),
+        });
+        interaction.reply(`Subscribed!`);
+      } catch (e) {
+        if (e instanceof UserSubscriptionError) {
+          interaction.reply("You're already subscribed!");
+        }
+      }
     }
   }
 
@@ -92,14 +99,17 @@ class Subscriptions {
 
   @Slash('listme', { description: "List subscriptions I'm subscribed to" })
   async listme(interaction: CommandInteraction): Promise<void> {
-    const filteredSubscriptions = (
-      await this.subscriptionsDatabase.listForGuild({
-        guildId: interaction.guildId,
-      })
-    ).filter((s) =>
-      s.userIds.includes(parseInt(interaction.member.user.id), 10)
+    const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
+      guildId: interaction.guildId,
+    });
+    console.log(allSubscriptions, parseInt(interaction.member.user.id));
+    const userId = parseInt(interaction.member.user.id, 10);
+    const filteredSubscriptions = allSubscriptions.filter((s) =>
+      s.userIds.includes(userId)
     );
-    interaction.reply(`${filteredSubscriptions.join(', ')}`);
+    interaction.reply(
+      `You're in: ${filteredSubscriptions.map((s) => s.name).join(', ')}`
+    );
   }
 }
 

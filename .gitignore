@@ -2,5 +2,5 @@ build
 node_modules
 yarn.lock
 .vscode
-bot_token
 *.sqlite
+bot_token
