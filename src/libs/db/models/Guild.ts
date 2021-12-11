@@ -11,7 +11,7 @@ export interface GuildInstance
 
 const Guild = db.define<GuildInstance>('Guild', {
   id: {
-    type: DataTypes.STRING(64),
+    type: `${DataTypes.STRING(255)} CHARSET ascii COLLATE ascii_bin`,
     primaryKey: true,
   },
 });

@@ -6,10 +6,10 @@ import { SimpleSubscription } from './subscriptions';
 import { SubscriptionInstance } from '../db/models/Subscription';
 import SubscriptionUsers from '../db/junctionModels/SubscriptionUsers';
 import { UserAttributes } from '../db/models/User';
+import { UserAlreadySubscribedError } from './subscriptionsErrors';
 import {
   SubscriptionDoesNotExistError,
   SubscriptionExistsError,
-  UserSubscriptionError,
 } from './subscriptionsErrors';
 
 /**
@@ -39,7 +39,7 @@ export interface ISubscriptionsDatabase {
     userId,
     subscriptionId,
   }: {
-    userId: number;
+    userId: string;
     subscriptionId: number;
   }) => AsyncOrSyncReturnT<SimpleSubscription>;
 
@@ -52,7 +52,7 @@ export interface ISubscriptionsDatabase {
     userId,
     subscriptionId,
   }: {
-    userId: number;
+    userId: string;
     subscriptionId: number;
   }) => AsyncOrSyncReturnT<void>;
 
@@ -71,7 +71,21 @@ export interface ISubscriptionsDatabase {
    * Deletes a subscription. Throws an error if the subscription does not
    * exist within the guild.
    */
-  deleteSubscription: ({ subscriptionId }: { subscriptionId: number }) => void;
+  deleteSubscription: ({
+    subscriptionId,
+  }: {
+    subscriptionId: number;
+  }) => AsyncOrSyncReturnT<boolean>;
+
+  /**
+   * Gets the subscription with this id. If not found, will throw a
+   * `SubscriptionDoesNotExistError`
+   */
+  getSubscription: ({
+    subscriptionId,
+  }: {
+    subscriptionId: number;
+  }) => AsyncOrSyncReturnT<SimpleSubscription>;
 }
 
 export interface SubscriptionInstanceWithUsers extends SubscriptionInstance {
@@ -103,7 +117,7 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     userId,
     subscriptionId,
   }: {
-    userId: number;
+    userId: string;
     subscriptionId: number;
   }): Promise<SimpleSubscription> {
     const subscription = (await Subscription.findByPk(subscriptionId, {
@@ -113,7 +127,7 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     if (!subscription) {
       throw new SubscriptionDoesNotExistError();
     } else if (subscription.users.map((u) => u.id).includes(userId)) {
-      throw new UserSubscriptionError();
+      throw new UserAlreadySubscribedError();
     }
 
     await Promise.all([
@@ -134,7 +148,7 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     userId,
     subscriptionId,
   }: {
-    userId: number;
+    userId: string;
     subscriptionId: number;
   }): Promise<void> {
     await SubscriptionUsers.destroy({ where: { userId, subscriptionId } });
@@ -170,7 +184,23 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     subscriptionId,
   }: {
     subscriptionId: number;
-  }): Promise<void> {
-    await Subscription.destroy({ where: { id: subscriptionId } });
+  }): Promise<boolean> {
+    return (
+      (await Subscription.destroy({ where: { id: subscriptionId } })) === 1
+    );
+  }
+
+  async getSubscription({
+    subscriptionId,
+  }: {
+    subscriptionId: number;
+  }): Promise<SimpleSubscription> {
+    const subscription = (await Subscription.findByPk(subscriptionId, {
+      include: [{ model: User, as: 'users', attributes: ['id'] }],
+    })) as SubscriptionInstanceWithUsers;
+    if (!subscription) throw new SubscriptionDoesNotExistError();
+
+    const { id, users, name } = subscription;
+    return { id, name, userIds: users.map((u) => u.id) };
   }
 }

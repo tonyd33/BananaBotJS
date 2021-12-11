@@ -2,7 +2,7 @@ import { DataTypes, Model } from 'sequelize/dist';
 import db from '../db';
 
 export interface UserAttributes {
-  id: number;
+  id: string;
 }
 
 export interface UserInstance
@@ -11,9 +11,8 @@ export interface UserInstance
 
 const User = db.define<UserInstance>('User', {
   id: {
-    type: DataTypes.INTEGER,
+    type: `${DataTypes.STRING(255)} CHARSET ascii COLLATE ascii_bin`,
     primaryKey: true,
-    autoIncrement: true,
     allowNull: false,
   },
 });

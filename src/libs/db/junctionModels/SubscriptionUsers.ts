@@ -7,7 +7,7 @@ import { WithOptionalId } from '../../types';
 export interface SubscriptionUserAttributes {
   id: number;
   subscriptionId: number;
-  userId: number;
+  userId: string;
 }
 
 export interface SubscriptionUserInstance
@@ -33,7 +33,7 @@ const SubscriptionUsers = db.define<SubscriptionUserInstance>(
       },
     },
     userId: {
-      type: DataTypes.INTEGER,
+      type: `${DataTypes.STRING(255)} CHARSET ascii COLLATE ascii_bin`,
       references: {
         model: User,
         key: 'id',

@@ -1,8 +1,8 @@
 import { Model, ModelCtor } from 'sequelize/dist';
-import { Database } from '../config';
+import config, { Environment } from '../config';
 
 export async function truncateTables(models: ModelCtor<Model>[]) {
-  if (process.env.DATABASE !== Database.TESTING) {
+  if (config.env !== Environment.TESTING) {
     throw new Error("We shouldn't be using this outside of testing");
   }
   for (const model of models) {

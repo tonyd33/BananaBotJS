@@ -22,11 +22,11 @@ const Subscription = db.define<SubscriptionInstance>('Subscription', {
     autoIncrement: true,
   },
   name: {
-    type: DataTypes.STRING(255),
+    type: `${DataTypes.STRING(255)} CHARSET ascii COLLATE ascii_bin`,
     allowNull: false,
   },
   guildId: {
-    type: DataTypes.STRING(64),
+    type: `${DataTypes.STRING(255)} CHARSET ascii COLLATE ascii_bin`,
     allowNull: false,
   },
 });

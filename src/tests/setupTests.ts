@@ -1,3 +1,4 @@
-import db from '../libs/db/db';
+import '../libs/db/db';
 import '../libs/db/associations';
-db.sync();
+import '../config';
+import 'leaked-handles';

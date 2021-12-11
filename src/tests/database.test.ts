@@ -54,14 +54,14 @@ describe(SQLSubscriptionsDatabase, () => {
     await Promise.all(
       [1, 2, 3].map((i) =>
         subscriptionsDatabase.subscribeUser({
-          userId: i,
+          userId: i.toString(),
           subscriptionId: subscription.id,
         })
       )
     );
     const updatedSimpleSubscription = await subscriptionsDatabase.subscribeUser(
       {
-        userId: 4,
+        userId: '4',
         subscriptionId: subscription.id,
       }
     );
@@ -73,7 +73,7 @@ describe(SQLSubscriptionsDatabase, () => {
     expect(updatedSimpleSubscription.userIds).toHaveLength(4);
 
     for (let i = 1; i < 5; i++) {
-      expect(updatedSimpleSubscription.userIds).toContain(i);
+      expect(updatedSimpleSubscription.userIds).toContain(i.toString());
     }
   });
 
@@ -84,11 +84,11 @@ describe(SQLSubscriptionsDatabase, () => {
       guildId,
     });
     await subscriptionsDatabase.subscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: subscription.id,
     });
     const subscribeUserPromise = subscriptionsDatabase.subscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: subscription.id,
     });
     await expect(subscribeUserPromise).rejects.toThrow(UserSubscriptionError);
@@ -101,7 +101,7 @@ describe(SQLSubscriptionsDatabase, () => {
     expect(subscription).toBeNull();
 
     const subscribeUserPromise = subscriptionsDatabase.subscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: nonExistentSubscriptionId,
     });
     await expect(subscribeUserPromise).rejects.toThrow(
@@ -117,10 +117,10 @@ describe(SQLSubscriptionsDatabase, () => {
 
     await SubscriptionUsers.create({
       subscriptionId: subscription.id,
-      userId: 1,
+      userId: '1',
     });
     await subscriptionsDatabase.unsubscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: subscription.id,
     });
     const foundSubscription = (await Subscription.findByPk(subscription.id, {
@@ -142,10 +142,10 @@ describe(SQLSubscriptionsDatabase, () => {
 
     await SubscriptionUsers.create({
       subscriptionId: subscription.id,
-      userId: 1,
+      userId: '1',
     });
     await subscriptionsDatabase.unsubscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: subscription.id,
     });
     const foundSubscription = (await Subscription.findByPk(subscription.id, {
@@ -166,7 +166,7 @@ describe(SQLSubscriptionsDatabase, () => {
     });
 
     await subscriptionsDatabase.unsubscribeUser({
-      userId: 1,
+      userId: '1',
       subscriptionId: subscription.id,
     });
     const foundSubscription = (await Subscription.findByPk(subscription.id, {
@@ -226,5 +226,7 @@ describe(SQLSubscriptionsDatabase, () => {
     });
 
     await expect(deleteSubscriptionPromise).resolves.not.toThrow();
+    const wasDeleted = await deleteSubscriptionPromise;
+    expect(wasDeleted).toBe(false);
   });
 });

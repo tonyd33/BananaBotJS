@@ -12,8 +12,9 @@ export async function initializeBot() {
       Intents.FLAGS.GUILD_MESSAGES,
       Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
       Intents.FLAGS.GUILD_VOICE_STATES,
+      Intents.FLAGS.GUILD_MESSAGE_TYPING,
     ],
-    // botGuilds: [(client) => client.guilds.cache.map((guild) => guild.id)],
+    botGuilds: [(client) => client.guilds.cache.map((guild) => guild.id)],
     // silent: true,
   });
 

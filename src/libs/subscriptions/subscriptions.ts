@@ -1,21 +1,24 @@
 export interface SimpleSubscription {
   id: number;
   name: string;
-  userIds: number[];
+  userIds: string[];
 }
 
 /**
  * Returns a list of subscriptions matching the query.
- *
- * TODO: Implement and add tests
  */
 export function querySubscriptions(
   query: string,
   subscriptions: SimpleSubscription[],
   options: {} = {}
 ): SimpleSubscription[] {
+  if (query.length === 0) return subscriptions;
   const regex = new RegExp(query, 'i');
   return subscriptions.filter((subscription) => {
-    subscription.name.match(regex);
+    const reverseRegex = new RegExp(subscription.name, 'i');
+    return (
+      subscription.name.match(regex) !== null ||
+      query.match(reverseRegex) !== null
+    );
   });
 }
