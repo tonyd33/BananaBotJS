@@ -151,7 +151,7 @@ export async function wrapCommandInteraction({
 }) {
   const { defer: deferArg, deferOpts } = opts;
   const defer: boolean = deferArg === undefined || deferArg;
-  let deferring: boolean = false;
+  let deferring = false;
 
   const wrapped = new WrappedCommandInteraction(interaction);
 
@@ -163,7 +163,6 @@ export async function wrapCommandInteraction({
     await callback(wrapped);
   } catch (err) {
     // TODO: Logging error to server
-    console.error(err, JSON.stringify(err, null, 2));
     if (interaction.replied) {
       await wrapped.followUp(
         "An unknown error has occurred 😱! We'll look into it. In the meantime, maybe try something else?",

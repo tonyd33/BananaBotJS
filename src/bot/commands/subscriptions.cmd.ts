@@ -320,7 +320,8 @@ export abstract class Subscriptions {
               .map((id) => userMention(id))
               .join(' ')}`,
             embeds: [embed],
-            components: [firstRow, secondRow],
+            // TODO: Add in second row
+            components: [firstRow],
             allowedMentions: { parse: ['users', 'everyone'] },
           },
           {
@@ -334,7 +335,7 @@ export abstract class Subscriptions {
 
   @ButtonComponent(unsubscribeButtonId)
   unsubscribeBtn(interaction: ButtonInteraction) {
-    interaction.reply('TODO: Implement');
+    interaction.reply({ content: 'TODO: Implement' });
   }
 
   @ButtonComponent(subscribeButtonId)
@@ -399,9 +400,10 @@ function createEmbedForMentioningSubscriptions({
     value: userMention(id),
   }));
   embed.setFields(fields);
-  embed.setFooter(
-    'If you would like to be mentioned for this next time, click to subscribe below!'
-  );
+  // TODO: Implement
+  // embed.setFooter(
+  //   'If you would like to be mentioned for this next time, click to subscribe below!'
+  // );
   return embed;
 }
 
