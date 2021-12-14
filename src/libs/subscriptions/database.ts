@@ -7,6 +7,8 @@ import { SubscriptionInstance } from '../db/models/Subscription';
 import SubscriptionUsers from '../db/junctionModels/SubscriptionUsers';
 import { UserAttributes } from '../db/models/User';
 import { UserAlreadySubscribedError } from './subscriptionsErrors';
+import SubscriptionsMentionMessage from '../db/models/SubscriptionsMentionMessage';
+import { SubscriptionsMentionMessageInstance } from '../db/models/SubscriptionsMentionMessage';
 import {
   SubscriptionDoesNotExistError,
   SubscriptionExistsError,
@@ -85,6 +87,12 @@ export interface ISubscriptionsDatabase {
     subscriptionId,
   }: {
     subscriptionId: number;
+  }) => AsyncOrSyncReturnT<SimpleSubscription>;
+
+  getSubscriptionForMessage: ({
+    messageId,
+  }: {
+    messageId: string;
   }) => AsyncOrSyncReturnT<SimpleSubscription>;
 }
 
@@ -201,6 +209,35 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     if (!subscription) throw new SubscriptionDoesNotExistError();
 
     const { id, users, name } = subscription;
+    return { id, name, userIds: users.map((u) => u.id) };
+  }
+
+  async getSubscriptionForMessage({
+    messageId,
+  }: {
+    messageId: string;
+  }): Promise<SimpleSubscription> {
+    const subscriptionsMentionMessage =
+      (await SubscriptionsMentionMessage.findByPk(messageId, {
+        include: [
+          {
+            model: Subscription,
+            attributes: ['id', 'name'],
+            include: [{ model: User, as: 'users', attributes: ['id'] }],
+          },
+        ],
+      })) as
+        | (SubscriptionsMentionMessageInstance & {
+            Subscription: SubscriptionInstanceWithUsers;
+          })
+        | null;
+    if (
+      !subscriptionsMentionMessage ||
+      !subscriptionsMentionMessage.Subscription
+    ) {
+      throw new SubscriptionDoesNotExistError();
+    }
+    const { id, users, name } = subscriptionsMentionMessage.Subscription;
     return { id, name, userIds: users.map((u) => u.id) };
   }
 }

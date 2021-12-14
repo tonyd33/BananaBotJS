@@ -2,6 +2,8 @@ import {
   CommandInteraction,
   InteractionDeferReplyOptions,
   InteractionReplyOptions,
+  Message,
+  MessageEmbed,
   MessagePayload,
 } from 'discord.js';
 
@@ -40,7 +42,7 @@ export interface InteractionReplyOpts {
 
 type OrigReplyPayloadType = string | MessagePayload | InteractionReplyOptions;
 
-function processMessage(
+export function formatMessage(
   origMessage: string,
   opts: InteractionReplyOpts
 ): string {
@@ -53,7 +55,14 @@ function processMessage(
   return origMessage;
 }
 
-function modifyPayload(
+export function formatEmbed(embed: MessageEmbed, opts: InteractionReplyOpts) {
+  if (embed.title) {
+    embed.title = formatMessage(embed.title, opts);
+  }
+  return embed;
+}
+
+export function modifyPayload(
   origArg: OrigReplyPayloadType,
   opts: InteractionReplyOpts
 ): OrigReplyPayloadType {
@@ -62,10 +71,10 @@ function modifyPayload(
     processEmbedTitleArg === undefined || processEmbedTitleArg;
   let payload = origArg;
   if (typeof payload === 'string') {
-    payload = processMessage(payload, opts);
+    payload = formatMessage(payload, opts);
   } else {
     if ('content' in payload && payload.content) {
-      payload.content = processMessage(payload.content, opts);
+      payload.content = formatMessage(payload.content, opts);
     }
 
     if (
@@ -75,7 +84,7 @@ function modifyPayload(
     ) {
       for (const embed of payload.embeds) {
         if (embed.title) {
-          embed.title = processMessage(embed.title, opts);
+          embed.title = formatMessage(embed.title, opts);
         }
       }
     }
@@ -101,7 +110,7 @@ export class WrappedCommandInteraction {
   public async reply(
     origArg: OrigReplyPayloadType,
     opts: InteractionReplyOpts
-  ): Promise<void> {
+  ): ReturnType<CommandInteraction['reply']> {
     const payload = modifyPayload(origArg, opts);
     return this.interaction.reply(payload);
   }
@@ -162,6 +171,7 @@ export async function wrapCommandInteraction({
     }
     await callback(wrapped);
   } catch (err) {
+    console.error(err);
     // TODO: Logging error to server
     if (interaction.replied) {
       await wrapped.followUp(

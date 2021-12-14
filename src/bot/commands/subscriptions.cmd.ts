@@ -5,7 +5,10 @@ import {
   SlashGroup,
   SlashOption,
 } from 'discordx';
-import { WrappedCommandInteraction } from '../../libs/botUtils/interactionWrapper';
+import {
+  formatEmbed,
+  formatMessage,
+} from '../../libs/botUtils/interactionWrapper';
 import {
   querySubscriptions,
   SimpleSubscription,
@@ -31,13 +34,17 @@ import {
   ISubscriptionsDatabase,
   SQLSubscriptionsDatabase,
 } from '../../libs/subscriptions/database';
-import {
-  InteractionReplyType,
-  wrapCommandInteraction,
-} from '../../libs/botUtils/interactionWrapper';
-import { bold, spoiler, userMention } from '@discordjs/builders';
+import { InteractionReplyType } from '../../libs/botUtils/interactionWrapper';
+import { bold, userMention } from '@discordjs/builders';
 import { APIEmbedField } from 'discord-api-types';
-import { Interaction } from 'discord.js';
+import SubscriptionsMentionMessage from '../../libs/db/models/SubscriptionsMentionMessage';
+import { UserNotSubscribedError } from '../../libs/subscriptions/subscriptionsErrors';
+
+enum AcceptanceState {
+  accepted = '🟢',
+  declined = '🔴',
+  pending = '🟠',
+}
 
 const acceptButtonId = 'accept-btn';
 const declineButtonId = 'decline-btn';
@@ -66,36 +73,36 @@ export abstract class Subscriptions {
     interaction: CommandInteraction | AutocompleteInteraction
   ): Promise<void> {
     if (interaction.isAutocomplete()) return;
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        try {
-          const subscription = await this.subscriptionsDatabase.subscribeUser({
-            userId: interaction.member.user.id,
-            subscriptionId: subscriptionId,
-          });
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const subscription = await this.subscriptionsDatabase.subscribeUser({
+        userId: interaction.member.user.id,
+        subscriptionId: subscriptionId,
+      });
 
-          wrapped.followUp(`Subscribed to ${subscription.name}!`, {
-            replyType: InteractionReplyType.success,
-          });
-        } catch (e) {
-          const failureOpts: InteractionReplyOpts = {
-            replyType: InteractionReplyType.error,
-          };
-          let message: string;
-          if (e instanceof UserAlreadySubscribedError) {
-            message = "You're already subscribed!";
-          } else if (e instanceof SubscriptionDoesNotExistError) {
-            message =
-              "This subscription doesn't exist anymore for some reason...";
-          } else {
-            message = "Something weird happened... we couldn't make it happen.";
-          }
-          wrapped.followUp(message, failureOpts);
-        }
-      },
-    });
+      interaction.followUp({
+        content: formatMessage(`Subscribed to ${subscription.name}!`, {
+          replyType: InteractionReplyType.success,
+        }),
+        ephemeral: true,
+      });
+    } catch (e) {
+      const failureOpts: InteractionReplyOpts = {
+        replyType: InteractionReplyType.error,
+      };
+      let message: string;
+      if (e instanceof UserAlreadySubscribedError) {
+        message = "You're already subscribed!";
+      } else if (e instanceof SubscriptionDoesNotExistError) {
+        message = "This subscription doesn't exist anymore for some reason...";
+      } else {
+        message = "Something weird happened... we couldn't make it happen.";
+      }
+      interaction.followUp({
+        content: formatMessage(message, failureOpts),
+        ephemeral: true,
+      });
+    }
   }
 
   @Slash('create', { description: 'Creates a subscription' })
@@ -108,33 +115,32 @@ export abstract class Subscriptions {
     interaction: CommandInteraction | AutocompleteInteraction
   ): Promise<void> {
     if (!interaction.isCommand()) return;
-
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        try {
-          await this.subscriptionsDatabase.createSubscription({
-            guildId: interaction.guildId,
-            subscriptionName: name,
-          });
-          wrapped.followUp(`Created ${name}`, {
-            replyType: InteractionReplyType.success,
-          });
-        } catch (e) {
-          const failureOpts: InteractionReplyOpts = {
-            replyType: InteractionReplyType.error,
-          };
-          let message: string;
-          if (e instanceof SubscriptionDoesNotExistError) {
-            message = `${name} already exists in this server!`;
-          } else {
-            message = `Something weird happened... we couldn't create ${name} for some reason.`;
-          }
-          wrapped.followUp(message, failureOpts);
-        }
-      },
-    });
+    try {
+      await interaction.deferReply();
+      await this.subscriptionsDatabase.createSubscription({
+        guildId: interaction.guildId,
+        subscriptionName: name,
+      });
+      interaction.followUp(
+        formatMessage(`Created ${name}`, {
+          replyType: InteractionReplyType.success,
+        })
+      );
+    } catch (e) {
+      const failureOpts: InteractionReplyOpts = {
+        replyType: InteractionReplyType.error,
+      };
+      let message: string;
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = `${name} already exists in this server!`;
+      } else {
+        message = `Something weird happened... we couldn't create ${name} for some reason.`;
+      }
+      interaction.followUp({
+        content: formatMessage(message, failureOpts),
+        ephemeral: true,
+      });
+    }
   }
 
   @Slash('leave', { description: 'Unsubscribes to a subscription' })
@@ -148,20 +154,33 @@ export abstract class Subscriptions {
   ): Promise<void> {
     if (!interaction.isCommand()) return;
 
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        await this.subscriptionsDatabase.unsubscribeUser({
-          userId: interaction.member.user.id,
-          subscriptionId: parseInt(subscriptionId, 10),
-        });
-        // TODO: Get subscription name and send it
-        await wrapped.followUp('Left the subscription!', {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      await this.subscriptionsDatabase.unsubscribeUser({
+        userId: interaction.member.user.id,
+        subscriptionId: parseInt(subscriptionId, 10),
+      });
+      // TODO: Get subscription name and send it
+      await interaction.followUp({
+        content: formatMessage('Left the subscription!', {
           replyType: InteractionReplyType.success,
-        });
-      },
-    });
+        }),
+        ephemeral: true,
+      });
+    } catch (e) {
+      let message: string;
+      if (e instanceof UserNotSubscribedError) {
+        message = "You weren't subscribed in the first place!";
+      } else {
+        message = 'Something weird happened...';
+      }
+      await interaction.followUp({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
   }
 
   @Slash('delete', { description: 'Deletes a subscription' })
@@ -175,85 +194,90 @@ export abstract class Subscriptions {
   ): Promise<void> {
     if (!interaction.isCommand()) return;
 
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        await this.subscriptionsDatabase.deleteSubscription({
-          subscriptionId: subscriptionId,
-        });
-        // TODO: Get subscription name before deletion and send it
-        await wrapped.followUp('Deleted the subscription!', {
+    try {
+      await interaction.deferReply();
+      await this.subscriptionsDatabase.deleteSubscription({
+        subscriptionId: subscriptionId,
+      });
+      // TODO: Get subscription name before deletion and send it
+      await interaction.followUp(
+        formatMessage('Deleted the subscription!', {
           replyType: InteractionReplyType.success,
-        });
-      },
-    });
+        })
+      );
+    } catch (e) {
+      let message: string;
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "This subscription doesn't exist!";
+      } else {
+        message = 'Something weird happened...';
+      }
+      await interaction.followUp({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
   }
 
   @Slash('me', { description: "Lists subscriptions I'm subscribed to" })
   @SlashGroup('list')
   async listMe(interaction: CommandInteraction): Promise<void> {
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
-          guildId: interaction.guildId,
-        });
-        const userId = interaction.member.user.id;
-        const filteredSubscriptions = allSubscriptions.filter((s) =>
-          s.userIds.includes(userId)
-        );
+    await interaction.deferReply({ ephemeral: true });
+    const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
+      guildId: interaction.guildId,
+    });
+    const userId = interaction.member.user.id;
+    const filteredSubscriptions = allSubscriptions.filter((s) =>
+      s.userIds.includes(userId)
+    );
 
-        const noSubscriptions = filteredSubscriptions.length == 0;
+    const noSubscriptions = filteredSubscriptions.length == 0;
 
-        const embed = createEmbedForListingSubscriptions({
-          subscriptions: filteredSubscriptions,
-          username: interaction.member.user.username,
-          noSubscriptionsMessage:
-            "You're not in any subscriptions! Try joining one with `/subscription join`",
-        });
+    const embed = createEmbedForListingSubscriptions({
+      subscriptions: filteredSubscriptions,
+      username: interaction.member.user.username,
+      noSubscriptionsMessage:
+        "You're not in any subscriptions! Try joining one with `/subscription join`",
+    });
 
-        await wrapped.followUp(
-          { embeds: [embed], ephemeral: true },
-          {
-            ...(noSubscriptions
-              ? { replyType: InteractionReplyType.warn }
-              : { customPrefix: '📝' }),
-          }
-        );
-      },
+    await interaction.followUp({
+      embeds: [
+        formatEmbed(embed, {
+          ...(noSubscriptions
+            ? { replyType: InteractionReplyType.warn }
+            : { customPrefix: '📝' }),
+        }),
+      ],
+      ephemeral: true,
     });
   }
 
   @Slash('server', { description: 'Lists subscriptions in this server' })
   @SlashGroup('list')
   async listServer(interaction: CommandInteraction): Promise<void> {
-    await wrapCommandInteraction({
-      interaction,
-      opts: {},
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
-          guildId: interaction.guildId,
-        });
+    await interaction.deferReply();
+    const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
+      guildId: interaction.guildId,
+    });
 
-        const noSubscriptions = allSubscriptions.length == 0;
+    const noSubscriptions = allSubscriptions.length == 0;
 
-        const embed = createEmbedForListingSubscriptions({
-          subscriptions: allSubscriptions,
-          username: interaction.member.user.username,
-          noSubscriptionsMessage:
-            'This server has no subscriptions! Try creating one with `/subscriptions create`',
-        });
-        await wrapped.followUp(
-          { embeds: [embed] },
-          {
-            ...(noSubscriptions
-              ? { replyType: InteractionReplyType.warn }
-              : { customPrefix: '📝' }),
-          }
-        );
-      },
+    const embed = createEmbedForListingSubscriptions({
+      subscriptions: allSubscriptions,
+      username: interaction.member.user.username,
+      noSubscriptionsMessage:
+        'This server has no subscriptions! Try creating one with `/subscriptions create`',
+    });
+    await interaction.followUp({
+      embeds: [
+        formatEmbed(embed, {
+          ...(noSubscriptions
+            ? { replyType: InteractionReplyType.warn }
+            : { customPrefix: '📝' }),
+        }),
+      ],
     });
   }
 
@@ -267,90 +291,167 @@ export abstract class Subscriptions {
     interaction: CommandInteraction | AutocompleteInteraction
   ): Promise<void> {
     if (!interaction.isCommand()) return;
-
-    await wrapCommandInteraction({
-      interaction,
-      opts: { defer: false },
-      callback: async (wrapped: WrappedCommandInteraction) => {
-        const simpleSubscription =
-          await this.subscriptionsDatabase.getSubscription({
-            subscriptionId: subscriptionId,
-          });
-
-        const embed = createEmbedForMentioningSubscriptions({
-          callee: interaction.user,
-          subscription: simpleSubscription,
+    try {
+      const simpleSubscription =
+        await this.subscriptionsDatabase.getSubscription({
+          subscriptionId: subscriptionId,
         });
 
-        const declineButton = new MessageButton()
-          .setLabel('Decline')
-          .setEmoji('❎')
-          .setStyle('DANGER')
-          .setCustomId(declineButtonId);
-        const acceptButton = new MessageButton()
-          .setLabel('Accept')
-          .setEmoji('✅')
-          .setStyle('PRIMARY')
-          .setCustomId(acceptButtonId);
-        const unsubscribeButton = new MessageButton()
-          .setLabel('Unsubscribe')
-          .setEmoji('🔕')
-          .setStyle('SECONDARY')
-          .setCustomId(unsubscribeButtonId);
-        const subscribeButton = new MessageButton()
-          .setLabel('Subscribe')
-          .setEmoji('🔔')
-          .setStyle('SECONDARY')
-          .setCustomId(subscribeButtonId);
+      const embed = createEmbedForMentioningSubscriptions({
+        callee: interaction.user,
+        subscription: simpleSubscription,
+      });
 
-        const firstRow = new MessageActionRow().addComponents(
-          acceptButton,
-          declineButton
-        );
-        const secondRow = new MessageActionRow().addComponents(
-          subscribeButton,
-          unsubscribeButton
-        );
+      const declineButton = new MessageButton()
+        .setLabel('Decline')
+        .setEmoji('❎')
+        .setStyle('DANGER')
+        .setCustomId(declineButtonId);
+      const acceptButton = new MessageButton()
+        .setLabel('Accept')
+        .setEmoji('✅')
+        .setStyle('PRIMARY')
+        .setCustomId(acceptButtonId);
+      const unsubscribeButton = new MessageButton()
+        .setLabel('Unsubscribe')
+        .setEmoji('🔕')
+        .setStyle('SECONDARY')
+        .setCustomId(unsubscribeButtonId);
+      const subscribeButton = new MessageButton()
+        .setLabel('Subscribe')
+        .setEmoji('🔔')
+        .setStyle('SECONDARY')
+        .setCustomId(subscribeButtonId);
 
-        // Mentions don't work with `followUp`
-        await wrapped.reply(
-          {
-            // TODO: Use roles
-            content: `${simpleSubscription.userIds
-              .map((id) => userMention(id))
-              .join(' ')}`,
-            embeds: [embed],
-            // TODO: Add in second row
-            components: [firstRow],
-            allowedMentions: { parse: ['users', 'everyone'] },
-          },
-          {
-            replyType: InteractionReplyType.success,
-            customPrefix: '🔔',
-          }
-        );
-      },
-    });
+      const firstRow = new MessageActionRow().addComponents(
+        acceptButton,
+        declineButton
+      );
+      const secondRow = new MessageActionRow().addComponents(
+        subscribeButton,
+        unsubscribeButton
+      );
+
+      const opts: InteractionReplyOpts = {
+        replyType: InteractionReplyType.success,
+        customPrefix: '🔔',
+      };
+
+      // Mentions don't work with `followUp`
+      const message = await interaction.reply({
+        // TODO: Use role
+        content: formatMessage(
+          `${simpleSubscription.userIds
+            .map((id) => userMention(id))
+            .join(' ')}`,
+          opts
+        ),
+        embeds: [formatEmbed(embed, opts)],
+        components: [firstRow, secondRow],
+        allowedMentions: { parse: ['users', 'everyone'] },
+        fetchReply: true,
+      });
+
+      await SubscriptionsMentionMessage.create({
+        messageId: message.id,
+        subscriptionId: subscriptionId,
+      });
+    } catch (e) {
+      interaction.followUp({
+        content: formatMessage('Something weird happened...', {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
   }
 
   @ButtonComponent(unsubscribeButtonId)
-  unsubscribeBtn(interaction: ButtonInteraction) {
-    interaction.reply({ content: 'TODO: Implement' });
+  async unsubscribeBtn(interaction: ButtonInteraction) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const subscription =
+        await this.subscriptionsDatabase.getSubscriptionForMessage({
+          messageId: interaction.message.id,
+        });
+      await this.subscriptionsDatabase.unsubscribeUser({
+        userId: interaction.user.id,
+        subscriptionId: subscription.id,
+      });
+      interaction.followUp({
+        content: formatMessage(`Unsubscribed to ${subscription.name}!`, {
+          replyType: InteractionReplyType.success,
+        }),
+        ephemeral: true,
+      });
+    } catch (e) {
+      let message: string;
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "This subscription doesn't exist anymore!";
+      } else if (e instanceof UserNotSubscribedError) {
+        message = "You're not subscribed to this subscription!";
+      } else {
+        message = 'Something weird happened...';
+      }
+      interaction.followUp({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
   }
 
   @ButtonComponent(subscribeButtonId)
-  subscribeBtn(interaction: ButtonInteraction) {
-    interaction.reply('TODO: Implement');
+  async subscribeBtn(interaction: ButtonInteraction) {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const subscription =
+        await this.subscriptionsDatabase.getSubscriptionForMessage({
+          messageId: interaction.message.id,
+        });
+      await this.subscriptionsDatabase.subscribeUser({
+        userId: interaction.user.id,
+        subscriptionId: subscription.id,
+      });
+      interaction.followUp({
+        content: formatMessage(`Subscribed to ${subscription.name}!`, {
+          replyType: InteractionReplyType.success,
+        }),
+        ephemeral: true,
+      });
+    } catch (e) {
+      let message: string;
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "This subscription doesn't exist anymore!";
+      } else if (e instanceof UserAlreadySubscribedError) {
+        message = "You're already subscribed!";
+      } else {
+        message = 'Something weird happened...';
+      }
+      interaction.followUp({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
   }
 
   @ButtonComponent(acceptButtonId)
   async acceptBtn(interaction: ButtonInteraction) {
-    await modifyReplyEmbedAcceptanceForUser({ interaction, newValue: '🟢' });
+    await modifyReplyEmbedAcceptanceForUser({
+      interaction,
+      newValue: AcceptanceState.accepted,
+    });
   }
 
   @ButtonComponent(declineButtonId)
   async declineBtn(interaction: ButtonInteraction) {
-    await modifyReplyEmbedAcceptanceForUser({ interaction, newValue: '🔴' });
+    await modifyReplyEmbedAcceptanceForUser({
+      interaction,
+      newValue: AcceptanceState.declined,
+    });
   }
 }
 
@@ -396,7 +497,7 @@ function createEmbedForMentioningSubscriptions({
   const fields: EmbedField[] = userIds.map((id) => ({
     inline: true,
     // TODO: Use enum values
-    name: id !== callee.id ? '🟠' : '🟢',
+    name: id !== callee.id ? AcceptanceState.pending : AcceptanceState.accepted,
     value: userMention(id),
   }));
   embed.setFields(fields);
