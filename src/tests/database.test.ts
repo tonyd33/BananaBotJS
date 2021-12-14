@@ -229,4 +229,16 @@ describe(SQLSubscriptionsDatabase, () => {
     const wasDeleted = await deleteSubscriptionPromise;
     expect(wasDeleted).toBe(false);
   });
+
+  it('creates two subscriptions of the same name across servers successfully', async () => {
+    const name = 'asdf';
+    await subscriptionsDatabase.createSubscription({
+      guildId: '1234',
+      subscriptionName: name,
+    });
+    await subscriptionsDatabase.createSubscription({
+      guildId: '1235',
+      subscriptionName: name,
+    });
+  });
 });

@@ -170,7 +170,7 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     subscriptionName: string;
   }): Promise<SimpleSubscription> {
     const subscription = (await Subscription.findOne({
-      where: { name: subscriptionName },
+      where: { name: subscriptionName, guildId },
       attributes: ['id', 'name'],
       include: [{ model: User, as: 'users', attributes: ['id'] }],
     })) as SubscriptionInstanceWithUsers | null;

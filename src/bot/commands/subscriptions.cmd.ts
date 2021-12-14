@@ -16,6 +16,7 @@ import {
 import { InteractionReplyOpts } from '../../libs/botUtils/interactionWrapper';
 import {
   SubscriptionDoesNotExistError,
+  SubscriptionExistsError,
   UserAlreadySubscribedError,
 } from '../../libs/subscriptions/subscriptionsErrors';
 import {
@@ -131,7 +132,7 @@ export abstract class Subscriptions {
         replyType: InteractionReplyType.error,
       };
       let message: string;
-      if (e instanceof SubscriptionDoesNotExistError) {
+      if (e instanceof SubscriptionExistsError) {
         message = `${name} already exists in this server!`;
       } else {
         message = `Something weird happened... we couldn't create ${name} for some reason.`;
