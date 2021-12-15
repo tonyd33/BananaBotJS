@@ -16,8 +16,12 @@ export enum Environment {
 }
 
 export function configureEnv(env: Environment) {
+  const sharedConfigPath = path.resolve(__dirname, `../config/env/SHARED.env`);
   const configPath = path.resolve(__dirname, `../config/env/${env}.env`);
-  const envVariables = dotenv.parse(fs.readFileSync(configPath));
+  const envVariables: dotenv.DotenvParseOutput = {
+    ...dotenv.parse(fs.readFileSync(sharedConfigPath)),
+    ...dotenv.parse(fs.readFileSync(configPath)),
+  };
   return envVariables;
 }
 
@@ -40,10 +44,18 @@ function getSequelizeArgs(
 export interface Config {
   database: SequelizeArgs;
   env: Environment;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsRegion: string;
+  openAIKey: string;
 }
 
 const config: Config = {
   database: getSequelizeArgs(envVars),
+  awsAccessKeyId: envVars.AWS_ACCESS_KEY_ID,
+  awsSecretAccessKey: envVars.AWS_SECRET_ACCESS_KEY,
+  awsRegion: envVars.AWS_REGION,
+  openAIKey: envVars.OPEN_AI_KEY,
   env: Object.values(Environment).includes(process.env.ENV as Environment)
     ? (process.env.ENV as Environment)
     : Environment.DEVELOPMENT,

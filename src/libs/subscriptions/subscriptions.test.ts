@@ -1,18 +1,15 @@
-import {
-  querySubscriptions,
-  SimpleSubscription,
-} from '../libs/subscriptions/subscriptions';
-import FakeData from './FakeData';
+import { querySubscriptions, ClientSubscription } from './subscriptions';
+import FakeData from '../../tests/FakeData';
 
 describe(querySubscriptions, () => {
   it('autocompletes basic search', () => {
     const query = 'peanut';
 
-    const subscription1: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription1: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'peanut butter',
     });
 
-    const subscription2: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription2: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'jelly jam',
     });
     const queried = querySubscriptions(query, [subscription1, subscription2]);
@@ -24,11 +21,11 @@ describe(querySubscriptions, () => {
   it('autocompletes case insensitive', () => {
     const query = 'PeaNUT';
 
-    const subscription1: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription1: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'peanut butter',
     });
 
-    const subscription2: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription2: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'jelly jam',
     });
     const queried = querySubscriptions(query, [subscription1, subscription2]);
@@ -40,11 +37,11 @@ describe(querySubscriptions, () => {
   it('autocompletes case insensitive', () => {
     const query = 'PeaNUT';
 
-    const subscription1: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription1: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'peanut butter',
     });
 
-    const subscription2: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription2: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'jelly jam',
     });
     const queried = querySubscriptions(query, [subscription1, subscription2]);
@@ -56,11 +53,11 @@ describe(querySubscriptions, () => {
   it('reverse matches', () => {
     const query = 'peanut butter';
 
-    const subscription1: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription1: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'peaNUT',
     });
 
-    const subscription2: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription2: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'jelly jam',
     });
     const queried = querySubscriptions(query, [subscription1, subscription2]);
@@ -72,11 +69,11 @@ describe(querySubscriptions, () => {
   it('shows everything on empty query', () => {
     const query = '';
 
-    const subscription1: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription1: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'peanut butter',
     });
 
-    const subscription2: SimpleSubscription = FakeData.makeSimpleSubscription({
+    const subscription2: ClientSubscription = FakeData.makeSimpleSubscription({
       name: 'jelly jam',
     });
     const queried = querySubscriptions(query, [subscription1, subscription2]);
