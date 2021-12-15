@@ -1,6 +1,6 @@
 import { DataTypes, Model } from 'sequelize/dist';
 import { WithOptionalId } from '../../types';
-import db from '../db';
+import db from '..';
 
 export interface SubscriptionAttributes {
   id: number;

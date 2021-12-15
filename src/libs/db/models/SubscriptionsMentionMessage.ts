@@ -1,5 +1,5 @@
 import { DataTypes, Model } from 'sequelize/dist';
-import db from '../db';
+import db from '..';
 
 export interface SubscriptionsMentionMessageAttributes {
   messageId: string;

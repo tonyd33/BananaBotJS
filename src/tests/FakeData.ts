@@ -1,9 +1,9 @@
-import { SimpleSubscription } from '../libs/subscriptions/subscriptions';
+import { ClientSubscription } from '../libs/subscriptions/subscriptions';
 let counter = 0;
 
 function makeSimpleSubscription(
-  options: Partial<SimpleSubscription> = {}
-): SimpleSubscription {
+  options: Partial<ClientSubscription> = {}
+): ClientSubscription {
   return {
     id: options.id ?? counter++,
     userIds: options.userIds ?? [],

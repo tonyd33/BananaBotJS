@@ -11,7 +11,7 @@ import {
 } from '../../libs/botUtils/interactionWrapper';
 import {
   querySubscriptions,
-  SimpleSubscription,
+  ClientSubscription,
 } from '../../libs/subscriptions/subscriptions';
 import { InteractionReplyOpts } from '../../libs/botUtils/interactionWrapper';
 import {
@@ -53,7 +53,7 @@ const subscribeButtonId = 'subscribe-btn';
 const unsubscribeButtonId = 'unsubscribe-btn';
 
 @Discord()
-@SlashGroup('subscriptions', 'Subscriptions', {
+@SlashGroup('sub', 'Subscriptions', {
   list: 'List-type commands',
 })
 export abstract class Subscriptions {
@@ -67,7 +67,9 @@ export abstract class Subscriptions {
   @Slash('join', { description: 'Subscribes to a subscription' })
   async join(
     @SlashOption('subscription', {
-      autocomplete: autocompleteSubscriptions,
+      autocomplete: autocompleteSubscriptionsWithConfig({
+        limitToUserUnsubscribed: true,
+      }),
       type: 'STRING',
     })
     subscriptionId: number,
@@ -147,7 +149,9 @@ export abstract class Subscriptions {
   @Slash('leave', { description: 'Unsubscribes to a subscription' })
   async leave(
     @SlashOption('subscription', {
-      autocomplete: autocompleteSubscriptions,
+      autocomplete: autocompleteSubscriptionsWithConfig({
+        limitToUserSubscribed: true,
+      }),
       type: 'STRING',
     })
     subscriptionId: string,
@@ -187,7 +191,7 @@ export abstract class Subscriptions {
   @Slash('delete', { description: 'Deletes a subscription' })
   async delete(
     @SlashOption('subscription', {
-      autocomplete: autocompleteSubscriptions,
+      autocomplete: autocompleteSubscriptionsWithConfig(),
       type: 'STRING',
     })
     subscriptionId: number,
@@ -197,12 +201,13 @@ export abstract class Subscriptions {
 
     try {
       await interaction.deferReply();
-      await this.subscriptionsDatabase.deleteSubscription({
-        subscriptionId: subscriptionId,
-      });
-      // TODO: Get subscription name before deletion and send it
+      const oldSubscription =
+        await this.subscriptionsDatabase.deleteSubscription({
+          subscriptionId: subscriptionId,
+        });
+
       await interaction.followUp(
-        formatMessage('Deleted the subscription!', {
+        formatMessage(`Deleted ${oldSubscription.name}!`, {
           replyType: InteractionReplyType.success,
         })
       );
@@ -285,7 +290,7 @@ export abstract class Subscriptions {
   @Slash('mention', { description: 'Mentions all users in a subscription' })
   async mention(
     @SlashOption('subscription', {
-      autocomplete: autocompleteSubscriptions,
+      autocomplete: autocompleteSubscriptionsWithConfig(),
       type: 'STRING',
     })
     subscriptionId: number,
@@ -456,26 +461,36 @@ export abstract class Subscriptions {
   }
 }
 
-// TODO: Have `newValue` as enum and use map off of it
 async function modifyReplyEmbedAcceptanceForUser({
   interaction,
   newValue,
 }: {
   interaction: ButtonInteraction;
-  newValue: string;
+  newValue: AcceptanceState;
 }) {
   await interaction.deferUpdate();
   const originalReply = await interaction.fetchReply();
-  // TODO: More graceful handling
+
+  const messageMalformedMessage = {
+    content: formatMessage(
+      "This message was malformed... we're getting rid of it.",
+      { replyType: InteractionReplyType.warn }
+    ),
+    ephemeral: true,
+  };
   if (originalReply.embeds.length !== 1) {
+    await interaction.followUp(messageMalformedMessage);
     await interaction.deleteReply();
     return;
   }
   const embed = originalReply.embeds[0];
   const user = interaction.user;
 
-  // TODO: More graceful handling
-  if (!embed.fields) return;
+  if (!embed.fields) {
+    await interaction.followUp(messageMalformedMessage);
+    await interaction.deleteReply();
+    return;
+  }
 
   embed.fields = embed.fields.map((prev: APIEmbedField) => ({
     ...prev,
@@ -489,7 +504,7 @@ function createEmbedForMentioningSubscriptions({
   subscription,
 }: {
   callee: User;
-  subscription: SimpleSubscription;
+  subscription: ClientSubscription;
 }): MessageEmbed {
   const { name, userIds } = subscription;
   const embed = new MessageEmbed();
@@ -497,15 +512,16 @@ function createEmbedForMentioningSubscriptions({
   embed.setDescription(`${bold(callee.username)} has mentioned you!`);
   const fields: EmbedField[] = userIds.map((id) => ({
     inline: true,
-    // TODO: Use enum values
     name: id !== callee.id ? AcceptanceState.pending : AcceptanceState.accepted,
     value: userMention(id),
   }));
   embed.setFields(fields);
-  // TODO: Implement
-  // embed.setFooter(
-  //   'If you would like to be mentioned for this next time, click to subscribe below!'
-  // );
+  embed.setFooter(
+    formatMessage(
+      'If you would like to be mentioned for this next time, click to subscribe below!',
+      { customPrefix: '💡' }
+    )
+  );
   return embed;
 }
 
@@ -514,7 +530,7 @@ function createEmbedForListingSubscriptions({
   username,
   noSubscriptionsMessage,
 }: {
-  subscriptions: SimpleSubscription[];
+  subscriptions: ClientSubscription[];
   username: string;
   noSubscriptionsMessage: string;
 }): MessageEmbed {
@@ -537,28 +553,45 @@ function createEmbedForListingSubscriptions({
   return embed;
 }
 
-/**
- * Resolves autocompleting a query for the subscriptions
- */
-async function autocompleteSubscriptions(
+function autocompleteSubscriptionsWithConfig(
+  opts: Partial<{
+    limitToUserSubscribed: boolean;
+    limitToUserUnsubscribed: boolean;
+  }> = {}
+): (
   this: Subscriptions,
   interaction: AutocompleteInteraction
-) {
-  const query: string | number = interaction.options.getFocused();
+) => Promise<void> {
+  return async function ac(
+    this: Subscriptions,
+    interaction: AutocompleteInteraction
+  ) {
+    const query: string | number = interaction.options.getFocused();
 
-  const subscriptions = await this.subscriptionsDatabase.listForGuild({
-    guildId: interaction.guildId,
-  });
-  const filteredSubscriptions = querySubscriptions(
-    query.toString(),
-    subscriptions
-  );
+    const subscriptions = await this.subscriptionsDatabase.listForGuild({
+      guildId: interaction.guildId,
+    });
+    let filteredSubscriptions = querySubscriptions(
+      query.toString(),
+      subscriptions
+    );
+    if (opts.limitToUserSubscribed) {
+      filteredSubscriptions = filteredSubscriptions.filter((s) =>
+        s.userIds.includes(interaction.user.id)
+      );
+    }
+    if (opts.limitToUserUnsubscribed) {
+      filteredSubscriptions = filteredSubscriptions.filter(
+        (s) => !s.userIds.includes(interaction.user.id)
+      );
+    }
 
-  const choices: ApplicationCommandOptionChoice[] = filteredSubscriptions.map(
-    (s): ApplicationCommandOptionChoice => ({
-      name: s.name,
-      value: s.id.toString(),
-    })
-  );
-  interaction.respond(choices);
+    const choices: ApplicationCommandOptionChoice[] = filteredSubscriptions.map(
+      (s): ApplicationCommandOptionChoice => ({
+        name: s.name,
+        value: s.id.toString(),
+      })
+    );
+    interaction.respond(choices);
+  };
 }

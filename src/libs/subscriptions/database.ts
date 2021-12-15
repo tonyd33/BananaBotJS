@@ -2,11 +2,14 @@ import Guild from '../db/models/Guild';
 import Subscription from '../db/models/Subscription';
 import User from '../db/models/User';
 import { AsyncOrSyncReturnT } from '../types';
-import { SimpleSubscription } from './subscriptions';
+import { ClientSubscription } from './subscriptions';
 import { SubscriptionInstance } from '../db/models/Subscription';
 import SubscriptionUsers from '../db/junctionModels/SubscriptionUsers';
 import { UserAttributes } from '../db/models/User';
-import { UserAlreadySubscribedError } from './subscriptionsErrors';
+import {
+  UserAlreadySubscribedError,
+  UserNotSubscribedError,
+} from './subscriptionsErrors';
 import SubscriptionsMentionMessage from '../db/models/SubscriptionsMentionMessage';
 import { SubscriptionsMentionMessageInstance } from '../db/models/SubscriptionsMentionMessage';
 import {
@@ -30,7 +33,7 @@ export interface ISubscriptionsDatabase {
     guildId,
   }: {
     guildId: string;
-  }) => AsyncOrSyncReturnT<SimpleSubscription[]>;
+  }) => AsyncOrSyncReturnT<ClientSubscription[]>;
 
   /**
    * Subscribes a user to a subscription within a guild and returns the updated
@@ -43,7 +46,7 @@ export interface ISubscriptionsDatabase {
   }: {
     userId: string;
     subscriptionId: number;
-  }) => AsyncOrSyncReturnT<SimpleSubscription>;
+  }) => AsyncOrSyncReturnT<ClientSubscription>;
 
   /**
    * Unsubscribes a user to a subscription within a guild and returns the updated
@@ -67,7 +70,7 @@ export interface ISubscriptionsDatabase {
   }: {
     guildId: string;
     subscriptionName: string;
-  }) => AsyncOrSyncReturnT<SimpleSubscription>;
+  }) => AsyncOrSyncReturnT<ClientSubscription>;
 
   /**
    * Deletes a subscription. Throws an error if the subscription does not
@@ -77,7 +80,7 @@ export interface ISubscriptionsDatabase {
     subscriptionId,
   }: {
     subscriptionId: number;
-  }) => AsyncOrSyncReturnT<boolean>;
+  }) => AsyncOrSyncReturnT<ClientSubscription>;
 
   /**
    * Gets the subscription with this id. If not found, will throw a
@@ -87,38 +90,46 @@ export interface ISubscriptionsDatabase {
     subscriptionId,
   }: {
     subscriptionId: number;
-  }) => AsyncOrSyncReturnT<SimpleSubscription>;
+  }) => AsyncOrSyncReturnT<ClientSubscription>;
 
   getSubscriptionForMessage: ({
     messageId,
   }: {
     messageId: string;
-  }) => AsyncOrSyncReturnT<SimpleSubscription>;
+  }) => AsyncOrSyncReturnT<ClientSubscription>;
 }
 
 export interface SubscriptionInstanceWithUsers extends SubscriptionInstance {
   users: UserAttributes[];
 }
 
+function subscriptionToClientSubscription(
+  subscription: SubscriptionInstanceWithUsers
+): ClientSubscription {
+  return {
+    id: subscription.id,
+    userIds: subscription.users.map((user) => user.id),
+    name: subscription.name,
+  };
+}
+
+const whereSubscriptionsWithUsers = {
+  include: [{ model: User, as: 'users', attributes: ['id'] }],
+};
+
 export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
   async listForGuild({
     guildId,
   }: {
     guildId: string;
-  }): Promise<SimpleSubscription[]> {
+  }): Promise<ClientSubscription[]> {
     const subscriptionInstances = (await Subscription.findAll({
+      ...whereSubscriptionsWithUsers,
       attributes: ['id', 'name'],
       where: { guildId },
-      include: [{ model: User, as: 'users', attributes: ['id'] }],
     })) as SubscriptionInstanceWithUsers[];
 
-    return subscriptionInstances.map(
-      (s): SimpleSubscription => ({
-        id: s.id,
-        userIds: s.users.map((u) => u.id),
-        name: s.name,
-      })
-    );
+    return subscriptionInstances.map(subscriptionToClientSubscription);
   }
 
   async subscribeUser({
@@ -127,10 +138,10 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
   }: {
     userId: string;
     subscriptionId: number;
-  }): Promise<SimpleSubscription> {
+  }): Promise<ClientSubscription> {
     const subscription = (await Subscription.findByPk(subscriptionId, {
+      ...whereSubscriptionsWithUsers,
       attributes: ['id', 'name'],
-      include: [{ model: User, as: 'users', attributes: ['id'] }],
     })) as SubscriptionInstanceWithUsers | null;
     if (!subscription) {
       throw new SubscriptionDoesNotExistError();
@@ -145,11 +156,7 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
 
     await subscription.reload();
 
-    return {
-      id: subscription.id,
-      userIds: subscription.users.map((user) => user.id),
-      name: subscription.name,
-    };
+    return subscriptionToClientSubscription(subscription);
   }
 
   async unsubscribeUser({
@@ -159,7 +166,13 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     userId: string;
     subscriptionId: number;
   }): Promise<void> {
-    await SubscriptionUsers.destroy({ where: { userId, subscriptionId } });
+    const subscription = await SubscriptionUsers.findOne({
+      where: { userId, subscriptionId },
+    });
+    if (!subscription) {
+      throw new UserNotSubscribedError();
+    }
+    await subscription.destroy();
   }
 
   async createSubscription({
@@ -168,17 +181,17 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
   }: {
     guildId: string;
     subscriptionName: string;
-  }): Promise<SimpleSubscription> {
+  }): Promise<ClientSubscription> {
     const subscription = (await Subscription.findOne({
+      ...whereSubscriptionsWithUsers,
       where: { name: subscriptionName, guildId },
       attributes: ['id', 'name'],
-      include: [{ model: User, as: 'users', attributes: ['id'] }],
     })) as SubscriptionInstanceWithUsers | null;
     if (subscription) {
       throw new SubscriptionExistsError();
     }
 
-    // TODO (P2 Polish): There should be a way to do the following in one transaction
+    // TODO: There should be a way to do the following in one transaction
     await Guild.upsert({ id: guildId });
     const newSubscription = await Subscription.create({
       name: subscriptionName,
@@ -192,31 +205,35 @@ export class SQLSubscriptionsDatabase implements ISubscriptionsDatabase {
     subscriptionId,
   }: {
     subscriptionId: number;
-  }): Promise<boolean> {
-    return (
-      (await Subscription.destroy({ where: { id: subscriptionId } })) === 1
-    );
+  }): Promise<ClientSubscription> {
+    const subscription = (await Subscription.findByPk(subscriptionId, {
+      ...whereSubscriptionsWithUsers,
+    })) as SubscriptionInstanceWithUsers;
+    if (!subscription) {
+      throw new SubscriptionDoesNotExistError();
+    }
+    await subscription.destroy();
+    return subscriptionToClientSubscription(subscription);
   }
 
   async getSubscription({
     subscriptionId,
   }: {
     subscriptionId: number;
-  }): Promise<SimpleSubscription> {
+  }): Promise<ClientSubscription> {
     const subscription = (await Subscription.findByPk(subscriptionId, {
       include: [{ model: User, as: 'users', attributes: ['id'] }],
     })) as SubscriptionInstanceWithUsers;
     if (!subscription) throw new SubscriptionDoesNotExistError();
 
-    const { id, users, name } = subscription;
-    return { id, name, userIds: users.map((u) => u.id) };
+    return subscriptionToClientSubscription(subscription);
   }
 
   async getSubscriptionForMessage({
     messageId,
   }: {
     messageId: string;
-  }): Promise<SimpleSubscription> {
+  }): Promise<ClientSubscription> {
     const subscriptionsMentionMessage =
       (await SubscriptionsMentionMessage.findByPk(messageId, {
         include: [

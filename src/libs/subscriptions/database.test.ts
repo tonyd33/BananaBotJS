@@ -1,17 +1,18 @@
-import Guild from '../libs/db/models/Guild';
-import Subscription from '../libs/db/models/Subscription';
+import Guild from '../db/models/Guild';
+import Subscription from '../db/models/Subscription';
 import {
   SQLSubscriptionsDatabase,
   SubscriptionInstanceWithUsers,
-} from '../libs/subscriptions/database';
-import { truncateTables } from './truncateTables';
-import { GuildInstance } from '../libs/db/models/Guild';
+} from './database';
+import { truncateTables } from '../../tests/truncateTables';
+import { GuildInstance } from '../db/models/Guild';
 import {
   UserSubscriptionError,
   SubscriptionDoesNotExistError,
-} from '../libs/subscriptions/subscriptionsErrors';
-import SubscriptionUsers from '../libs/db/junctionModels/SubscriptionUsers';
-import User from '../libs/db/models/User';
+} from './subscriptionsErrors';
+import SubscriptionUsers from '../db/junctionModels/SubscriptionUsers';
+import User from '../db/models/User';
+import { UserNotSubscribedError } from './subscriptionsErrors';
 
 describe(SQLSubscriptionsDatabase, () => {
   const subscriptionsDatabase = new SQLSubscriptionsDatabase();
@@ -134,41 +135,19 @@ describe(SQLSubscriptionsDatabase, () => {
     expect(userIds).toHaveLength(0);
   });
 
-  it('unsubscribes a subscribed user', async () => {
+  it('throws when unsubscribing an unsubscribed user', async () => {
     const subscription = await Subscription.create({
       name: 'subscription',
       guildId: guild.id,
     });
 
-    await SubscriptionUsers.create({
-      subscriptionId: subscription.id,
-      userId: '1',
-    });
-    await subscriptionsDatabase.unsubscribeUser({
+    const unsubscribeUserPromise = subscriptionsDatabase.unsubscribeUser({
       userId: '1',
       subscriptionId: subscription.id,
     });
-    const foundSubscription = (await Subscription.findByPk(subscription.id, {
-      attributes: ['id', 'name'],
-      include: [{ model: User, as: 'users', attributes: ['id'] }],
-    })) as SubscriptionInstanceWithUsers | null;
-
-    expect(foundSubscription).not.toBeNull();
-    if (!foundSubscription) return;
-    const userIds = foundSubscription.users.map((u) => u.id);
-    expect(userIds).toHaveLength(0);
-  });
-
-  it('does not throw when unsubscribing an unsubscribed user', async () => {
-    const subscription = await Subscription.create({
-      name: 'subscription',
-      guildId: guild.id,
-    });
-
-    await subscriptionsDatabase.unsubscribeUser({
-      userId: '1',
-      subscriptionId: subscription.id,
-    });
+    await expect(unsubscribeUserPromise).rejects.toThrowError(
+      UserNotSubscribedError
+    );
     const foundSubscription = (await Subscription.findByPk(subscription.id, {
       attributes: ['id', 'name'],
       include: [{ model: User, as: 'users', attributes: ['id'] }],
@@ -214,9 +193,12 @@ describe(SQLSubscriptionsDatabase, () => {
     });
 
     await expect(deleteSubscriptionPromise).resolves.not.toThrow();
+    const deletedSubscription = await deleteSubscriptionPromise;
+    expect(deletedSubscription.name).toBe(subscription.name);
+    expect(deletedSubscription.id).toBe(subscription.id);
   });
 
-  it('does not throw when deleting nonexistent subscription', async () => {
+  it('throws when deleting nonexistent subscription', async () => {
     const nonExistentSubscriptionId = 1;
     const subscription = await Subscription.findByPk(nonExistentSubscriptionId);
 
@@ -225,9 +207,9 @@ describe(SQLSubscriptionsDatabase, () => {
       subscriptionId: nonExistentSubscriptionId,
     });
 
-    await expect(deleteSubscriptionPromise).resolves.not.toThrow();
-    const wasDeleted = await deleteSubscriptionPromise;
-    expect(wasDeleted).toBe(false);
+    await expect(deleteSubscriptionPromise).rejects.toThrowError(
+      SubscriptionDoesNotExistError
+    );
   });
 
   it('creates two subscriptions of the same name across servers successfully', async () => {

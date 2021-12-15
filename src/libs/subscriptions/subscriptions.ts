@@ -1,4 +1,4 @@
-export interface SimpleSubscription {
+export interface ClientSubscription {
   id: number;
   name: string;
   userIds: string[];
@@ -9,9 +9,9 @@ export interface SimpleSubscription {
  */
 export function querySubscriptions(
   query: string,
-  subscriptions: SimpleSubscription[],
+  subscriptions: ClientSubscription[],
   options: {} = {}
-): SimpleSubscription[] {
+): ClientSubscription[] {
   if (query.length === 0) return subscriptions;
   const regex = new RegExp(query, 'i');
   return subscriptions.filter((subscription) => {

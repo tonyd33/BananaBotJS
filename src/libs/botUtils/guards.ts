@@ -5,6 +5,7 @@ import {
   SelectMenuInteraction,
 } from 'discord.js';
 import { GuardFunction } from 'discordx';
+import logger from '../logger';
 
 export const DefaultCatch: GuardFunction<
   | CommandInteraction
@@ -15,7 +16,6 @@ export const DefaultCatch: GuardFunction<
   try {
     await next();
   } catch (e) {
-    // TODO: Error logging
-    console.error(e);
+    logger.error(e);
   }
 };

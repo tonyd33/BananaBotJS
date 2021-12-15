@@ -1,5 +1,5 @@
 import { DataTypes, Model } from 'sequelize/dist';
-import db from '../db';
+import db from '..';
 import Subscription from '../models/Subscription';
 import User from '../models/User';
 import { WithOptionalId } from '../../types';

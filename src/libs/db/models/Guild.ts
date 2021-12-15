@@ -1,5 +1,5 @@
 import { Model, DataTypes } from 'sequelize/dist';
-import db from '../db';
+import db from '..';
 
 export interface GuildAttributes {
   id: string;
