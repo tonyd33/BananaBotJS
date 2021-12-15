@@ -1,5 +1,5 @@
-import db from '../src/libs/db/db';
 import '../src/libs/db/associations';
+import db from '../src/libs/db/index';
 
 async function run() {
   console.log('Syncing...');

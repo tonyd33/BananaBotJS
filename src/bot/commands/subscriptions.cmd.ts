@@ -363,8 +363,12 @@ export abstract class Subscriptions {
         subscriptionId: subscriptionId,
       });
     } catch (e) {
-      interaction.followUp({
-        content: formatMessage('Something weird happened...', {
+      let message = 'Something weird happened...';
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "That subscription doesn't exist!";
+      }
+      interaction.reply({
+        content: formatMessage(message, {
           replyType: InteractionReplyType.error,
         }),
         ephemeral: true,
