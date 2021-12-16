@@ -1,4 +1,4 @@
-import { ClientSubscription } from '../libs/subscriptions/subscriptions';
+import { ClientSubscription } from '../src/libs/subscriptions/subscriptions';
 let counter = 0;
 
 function makeSimpleSubscription(

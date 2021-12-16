@@ -1,5 +1,8 @@
-import { querySubscriptions, ClientSubscription } from './subscriptions';
-import FakeData from '../../tests/FakeData';
+import {
+  querySubscriptions,
+  ClientSubscription,
+} from '../src/libs/subscriptions/subscriptions';
+import FakeData from './FakeData';
 
 describe(querySubscriptions, () => {
   it('autocompletes basic search', () => {

@@ -1,5 +1,5 @@
 import { Model, ModelCtor } from 'sequelize/dist';
-import config, { Environment } from '../config';
+import config, { Environment } from '../src/config';
 
 export async function truncateTables(models: ModelCtor<Model>[]) {
   if (config.env !== Environment.TESTING) {

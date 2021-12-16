@@ -1,18 +1,18 @@
-import Guild from '../db/models/Guild';
-import Subscription from '../db/models/Subscription';
+import Guild from '../src/libs/db/models/Guild';
+import Subscription from '../src/libs/db/models/Subscription';
 import {
   SQLSubscriptionsDatabase,
   SubscriptionInstanceWithUsers,
-} from './database';
-import { truncateTables } from '../../tests/truncateTables';
-import { GuildInstance } from '../db/models/Guild';
+} from '../src/libs/subscriptions/database';
+import { truncateTables } from './truncateTables';
+import { GuildInstance } from '../src/libs/db/models/Guild';
 import {
   UserSubscriptionError,
   SubscriptionDoesNotExistError,
-} from './subscriptionsErrors';
-import SubscriptionUsers from '../db/junctionModels/SubscriptionUsers';
-import User from '../db/models/User';
-import { UserNotSubscribedError } from './subscriptionsErrors';
+} from '../src/libs/subscriptions/subscriptionsErrors';
+import SubscriptionUsers from '../src/libs/db/junctionModels/SubscriptionUsers';
+import User from '../src/libs/db/models/User';
+import { UserNotSubscribedError } from '../src/libs/subscriptions/subscriptionsErrors';
 
 describe(SQLSubscriptionsDatabase, () => {
   const subscriptionsDatabase = new SQLSubscriptionsDatabase();
