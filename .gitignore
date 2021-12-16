@@ -4,3 +4,4 @@ yarn.lock
 .vscode
 bot_token
 config/env
+package-lock.json

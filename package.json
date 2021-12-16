@@ -68,7 +68,7 @@
     "dotenv": "^10.0.0",
     "leaked-handles": "^5.2.0",
     "mysql2": "^2.3.3",
-    "openai": "^1.1.1",
+    "openai-api": "^1.2.6",
     "reflect-metadata": "^0.1.13",
     "sequelize": "^6.12.0-beta.1",
     "sqlite3": "^5.0.2",
