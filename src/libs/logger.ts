@@ -1,6 +1,7 @@
 import winston from 'winston';
-import CloudWatchTransport from 'winston-aws-cloudwatch';
 import config from '../config';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const CloudWatchTransport = require('winston-aws-cloudwatch');
 
 const logger = winston.createLogger({
   transports: [
@@ -17,7 +18,7 @@ const logger = winston.createLogger({
         secretAccessKey: config.awsSecretAccessKey,
         region: config.awsRegion,
       },
-      formatLog: (item) =>
+      formatLog: (item: { level: number; message: string; meta: object }) =>
         `${item.level}: ${item.message} ${JSON.stringify(item.meta)}`,
     }),
   ],
