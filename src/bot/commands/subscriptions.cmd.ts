@@ -243,7 +243,7 @@ export abstract class Subscriptions {
 
     const embed = createEmbedForListingSubscriptions({
       subscriptions: filteredSubscriptions,
-      username: interaction.member.user.username,
+      serverNameOrUserName: interaction.member.user.username,
       noSubscriptionsMessage:
         "You're not in any subscriptions! Try joining one with `/subscription join`",
     });
@@ -267,12 +267,21 @@ export abstract class Subscriptions {
     const allSubscriptions = await this.subscriptionsDatabase.listForGuild({
       guildId: interaction.guildId,
     });
+    if (!interaction.guild) {
+      await interaction.followUp({
+        content: formatMessage('You should be using this in a guild!', {
+          replyType: InteractionReplyType.warn,
+        }),
+        ephemeral: true,
+      });
+      return;
+    }
 
     const noSubscriptions = allSubscriptions.length == 0;
 
     const embed = createEmbedForListingSubscriptions({
       subscriptions: allSubscriptions,
-      username: interaction.member.user.username,
+      serverNameOrUserName: interaction.guild.name,
       noSubscriptionsMessage:
         'This server has no subscriptions! Try creating one with `/subscriptions create`',
     });
@@ -531,17 +540,17 @@ function createEmbedForMentioningSubscriptions({
 
 function createEmbedForListingSubscriptions({
   subscriptions,
-  username,
+  serverNameOrUserName,
   noSubscriptionsMessage,
 }: {
   subscriptions: ClientSubscription[];
-  username: string;
+  serverNameOrUserName: string;
   noSubscriptionsMessage: string;
 }): MessageEmbed {
   const embed = new MessageEmbed();
   const noSubscriptions = subscriptions.length === 0;
 
-  const title = `${username}'s subscriptions`;
+  const title = `${serverNameOrUserName}'s subscriptions`;
   embed.setTitle(title);
 
   if (noSubscriptions) embed.setDescription(noSubscriptionsMessage);
