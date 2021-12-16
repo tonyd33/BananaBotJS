@@ -4,7 +4,7 @@ import { Intents, Interaction, Message } from 'discord.js';
 import { Client } from 'discordx';
 import { importx } from '@discordx/importer';
 
-export async function initializeBot() {
+export function initializeBot() {
   const client = new Client({
     simpleCommand: { prefix: '~' },
     intents: [
@@ -15,7 +15,7 @@ export async function initializeBot() {
       Intents.FLAGS.GUILD_MESSAGE_TYPING,
     ],
     botGuilds: [(client) => client.guilds.cache.map((guild) => guild.id)],
-    // silent: true,
+    silent: true,
   });
 
   client.once('ready', async () => {
@@ -37,6 +37,6 @@ export async function initializeBot() {
   });
 
   importx(path.join(__dirname, 'commands', '**/*.cmd.{ts,js}')).then(() => {
-    client.login(process.env.BOT_TOKEN ?? ''); // provide your bot token
+    client.login(process.env.BOT_TOKEN ?? '');
   });
 }

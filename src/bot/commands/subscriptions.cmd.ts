@@ -56,7 +56,7 @@ const unsubscribeButtonId = 'unsubscribe-btn';
 @SlashGroup('sub', 'Subscriptions', {
   list: 'List-type commands',
 })
-export abstract class Subscriptions {
+export class Subscriptions {
   subscriptionsDatabase: ISubscriptionsDatabase;
 
   constructor() {
