@@ -26,9 +26,11 @@ import {
   CommandInteraction,
   EmbedField,
   EmbedFieldData,
+  InteractionReplyOptions,
   MessageActionRow,
   MessageButton,
   MessageEmbed,
+  MessagePayload,
   User,
 } from 'discord.js';
 import {
@@ -37,9 +39,10 @@ import {
 } from '../../libs/subscriptions/database';
 import { InteractionReplyType } from '../../libs/botUtils/interactionWrapper';
 import { bold, userMention } from '@discordjs/builders';
-import { APIEmbedField } from 'discord-api-types';
 import SubscriptionsMentionMessage from '../../libs/db/models/SubscriptionsMentionMessage';
 import { UserNotSubscribedError } from '../../libs/subscriptions/subscriptionsErrors';
+import logger from '../../libs/logger';
+import { Interaction } from 'discord.js';
 
 enum AcceptanceState {
   accepted = '🟢',
@@ -49,6 +52,7 @@ enum AcceptanceState {
 
 const acceptButtonId = 'accept-btn';
 const declineButtonId = 'decline-btn';
+const mentionButtonId = 'mention-btn';
 const subscribeButtonId = 'subscribe-btn';
 const unsubscribeButtonId = 'unsubscribe-btn';
 
@@ -63,7 +67,6 @@ export class Subscriptions {
     this.subscriptionsDatabase = new SQLSubscriptionsDatabase();
   }
 
-  // https://discord-ts.js.org/docs/decorators/commands/slashoption#autocomplete-option
   @Slash('join', { description: 'Subscribes to a subscription' })
   async join(
     @SlashOption('subscription', {
@@ -99,6 +102,7 @@ export class Subscriptions {
       } else if (e instanceof SubscriptionDoesNotExistError) {
         message = "This subscription doesn't exist anymore for some reason...";
       } else {
+        logger.error(e);
         message = "Something weird happened... we couldn't make it happen.";
       }
       interaction.followUp({
@@ -137,6 +141,7 @@ export class Subscriptions {
       if (e instanceof SubscriptionExistsError) {
         message = `${name} already exists in this server!`;
       } else {
+        logger.error(e);
         message = `Something weird happened... we couldn't create ${name} for some reason.`;
       }
       interaction.followUp({
@@ -177,6 +182,7 @@ export class Subscriptions {
       if (e instanceof UserNotSubscribedError) {
         message = "You weren't subscribed in the first place!";
       } else {
+        logger.error(e);
         message = 'Something weird happened...';
       }
       await interaction.followUp({
@@ -216,6 +222,88 @@ export class Subscriptions {
       if (e instanceof SubscriptionDoesNotExistError) {
         message = "This subscription doesn't exist!";
       } else {
+        logger.error(e);
+        message = 'Something weird happened...';
+      }
+      await interaction.followUp({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
+  }
+
+  @Slash('info', { description: 'Info on a subscription' })
+  async info(
+    @SlashOption('subscription', {
+      autocomplete: autocompleteSubscriptionsWithConfig(),
+      type: 'STRING',
+    })
+    subscriptionId: number,
+    interaction: CommandInteraction | AutocompleteInteraction
+  ): Promise<void> {
+    if (!interaction.isCommand()) return;
+
+    try {
+      await interaction.deferReply();
+      const subscription = await this.subscriptionsDatabase.getSubscription({
+        subscriptionId,
+      });
+
+      const mentionButton = new MessageButton()
+        .setLabel('Mention')
+        .setEmoji('🛎')
+        .setStyle('PRIMARY')
+        .setCustomId(mentionButtonId);
+      const mentionRow = new MessageActionRow().addComponents(mentionButton);
+      const components: MessageActionRow[] = [];
+
+      const embed = new MessageEmbed();
+      embed.setTitle(`${subscription.name}`);
+      if (subscription.userIds.length === 0) {
+        components.push(mentionRow);
+        embed.setDescription(`No one's in ${subscription.name} 😔`);
+      } else {
+        embed.setDescription(
+          `Subscribed users:\n${subscription.userIds
+            .map((id) => userMention(id))
+            .join('\n')}`
+        );
+      }
+      const unsubscribeButton = new MessageButton()
+        .setLabel('Unsubscribe')
+        .setEmoji('🔕')
+        .setStyle('SECONDARY')
+        .setCustomId(unsubscribeButtonId);
+      const subscribeButton = new MessageButton()
+        .setLabel('Subscribe')
+        .setEmoji('🔔')
+        .setStyle('SECONDARY')
+        .setCustomId(subscribeButtonId);
+
+      const subscribeRow = new MessageActionRow().addComponents(
+        subscribeButton,
+        unsubscribeButton
+      );
+
+      components.push(subscribeRow);
+      const message = await interaction.followUp({
+        embeds: [formatEmbed(embed, { customPrefix: 'ℹ️' })],
+        components,
+        fetchReply: true,
+      });
+
+      await SubscriptionsMentionMessage.create({
+        messageId: message.id,
+        subscriptionId: subscriptionId,
+      });
+    } catch (e) {
+      let message: string;
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "This subscription doesn't exist!";
+      } else {
+        logger.error(e);
         message = 'Something weird happened...';
       }
       await interaction.followUp({
@@ -312,60 +400,12 @@ export class Subscriptions {
           subscriptionId: subscriptionId,
         });
 
-      const embed = createEmbedForMentioningSubscriptions({
-        callee: interaction.user,
+      const messagePayload = getMentionMessagePayload({
         subscription: simpleSubscription,
+        interaction,
       });
 
-      const declineButton = new MessageButton()
-        .setLabel('Decline')
-        .setEmoji('❎')
-        .setStyle('DANGER')
-        .setCustomId(declineButtonId);
-      const acceptButton = new MessageButton()
-        .setLabel('Accept')
-        .setEmoji('✅')
-        .setStyle('PRIMARY')
-        .setCustomId(acceptButtonId);
-      const unsubscribeButton = new MessageButton()
-        .setLabel('Unsubscribe')
-        .setEmoji('🔕')
-        .setStyle('SECONDARY')
-        .setCustomId(unsubscribeButtonId);
-      const subscribeButton = new MessageButton()
-        .setLabel('Subscribe')
-        .setEmoji('🔔')
-        .setStyle('SECONDARY')
-        .setCustomId(subscribeButtonId);
-
-      const firstRow = new MessageActionRow().addComponents(
-        acceptButton,
-        declineButton
-      );
-      const secondRow = new MessageActionRow().addComponents(
-        subscribeButton,
-        unsubscribeButton
-      );
-
-      const opts: InteractionReplyOpts = {
-        replyType: InteractionReplyType.success,
-        customPrefix: '🔔',
-      };
-
-      // Mentions don't work with `followUp`
-      const message = await interaction.reply({
-        // TODO: Use role
-        content: formatMessage(
-          `${simpleSubscription.userIds
-            .map((id) => userMention(id))
-            .join(' ')}`,
-          opts
-        ),
-        embeds: [formatEmbed(embed, opts)],
-        components: [firstRow, secondRow],
-        allowedMentions: { parse: ['users', 'everyone'] },
-        fetchReply: true,
-      });
+      const message = await interaction.reply(messagePayload);
 
       await SubscriptionsMentionMessage.create({
         messageId: message.id,
@@ -375,6 +415,8 @@ export class Subscriptions {
       let message = 'Something weird happened...';
       if (e instanceof SubscriptionDoesNotExistError) {
         message = "That subscription doesn't exist!";
+      } else {
+        logger.error(e);
       }
       interaction.reply({
         content: formatMessage(message, {
@@ -410,6 +452,7 @@ export class Subscriptions {
       } else if (e instanceof UserNotSubscribedError) {
         message = "You're not subscribed to this subscription!";
       } else {
+        logger.error(e);
         message = 'Something weird happened...';
       }
       interaction.followUp({
@@ -446,6 +489,7 @@ export class Subscriptions {
       } else if (e instanceof UserAlreadySubscribedError) {
         message = "You're already subscribed!";
       } else {
+        logger.error(e);
         message = 'Something weird happened...';
       }
       interaction.followUp({
@@ -472,6 +516,102 @@ export class Subscriptions {
       newValue: AcceptanceState.declined,
     });
   }
+
+  @ButtonComponent(mentionButtonId)
+  async mentionBtn(interaction: ButtonInteraction) {
+    try {
+      const subscription =
+        await this.subscriptionsDatabase.getSubscriptionForMessage({
+          messageId: interaction.message.id,
+        });
+
+      const messagePayload = getMentionMessagePayload({
+        subscription,
+        interaction,
+      });
+
+      const message = await interaction.reply(messagePayload);
+
+      await SubscriptionsMentionMessage.create({
+        messageId: message.id,
+        subscriptionId: subscription.id,
+      });
+    } catch (e) {
+      let message = 'Something weird happened...';
+      if (e instanceof SubscriptionDoesNotExistError) {
+        message = "That subscription doesn't exist!";
+      } else {
+        logger.error(e);
+      }
+      interaction.reply({
+        content: formatMessage(message, {
+          replyType: InteractionReplyType.error,
+        }),
+        ephemeral: true,
+      });
+    }
+  }
+}
+
+function getMentionMessagePayload({
+  subscription,
+  interaction,
+}: {
+  subscription: ClientSubscription;
+  interaction: Interaction;
+}): InteractionReplyOptions & { fetchReply: true } {
+  const embed = createEmbedForMentioningSubscriptions({
+    callee: interaction.user,
+    subscription,
+  });
+
+  const declineButton = new MessageButton()
+    .setLabel('Decline')
+    .setEmoji('❎')
+    .setStyle('DANGER')
+    .setCustomId(declineButtonId);
+  const acceptButton = new MessageButton()
+    .setLabel('Accept')
+    .setEmoji('✅')
+    .setStyle('PRIMARY')
+    .setCustomId(acceptButtonId);
+  const unsubscribeButton = new MessageButton()
+    .setLabel('Unsubscribe')
+    .setEmoji('🔕')
+    .setStyle('SECONDARY')
+    .setCustomId(unsubscribeButtonId);
+  const subscribeButton = new MessageButton()
+    .setLabel('Subscribe')
+    .setEmoji('🔔')
+    .setStyle('SECONDARY')
+    .setCustomId(subscribeButtonId);
+
+  const firstRow = new MessageActionRow().addComponents(
+    acceptButton,
+    declineButton
+  );
+  const secondRow = new MessageActionRow().addComponents(
+    subscribeButton,
+    unsubscribeButton
+  );
+
+  const opts: InteractionReplyOpts = {
+    replyType: InteractionReplyType.success,
+    customPrefix: '🔔',
+  };
+
+  // Mentions don't work with `followUp`
+  return {
+    // TODO: Use role
+    content:
+      subscription.userIds.length > 0
+        ? subscription.userIds.map((id) => userMention(id)).join(' ')
+        : undefined,
+    embeds: [formatEmbed(embed, opts)],
+    components: [firstRow, secondRow],
+    allowedMentions: { parse: ['users', 'everyone'] },
+    fetchReply: true,
+  };
 }
 
 async function modifyReplyEmbedAcceptanceForUser({
@@ -504,11 +644,24 @@ async function modifyReplyEmbedAcceptanceForUser({
     await interaction.deleteReply();
     return;
   }
+  const fieldIndex = embed.fields.findIndex(
+    ({ value }) => value === userMention(user.id)
+  );
 
-  embed.fields = embed.fields.map((prev: APIEmbedField) => ({
-    ...prev,
-    name: prev.value.includes(user.id) ? newValue : prev.name,
-  }));
+  // Allow users who weren't in the mention originally to accept
+  if (fieldIndex === -1) {
+    embed.fields.push({
+      value: userMention(user.id),
+      name: newValue,
+      inline: true,
+    });
+  } else {
+    embed.fields[fieldIndex] = {
+      ...embed.fields[fieldIndex],
+      name: newValue,
+    };
+  }
+
   await interaction.editReply({ embeds: [embed] });
 }
 
@@ -522,13 +675,21 @@ function createEmbedForMentioningSubscriptions({
   const { name, userIds } = subscription;
   const embed = new MessageEmbed();
   embed.setTitle(name);
-  embed.setDescription(`${bold(callee.username)} has mentioned you!`);
-  const fields: EmbedField[] = userIds.map((id) => ({
-    inline: true,
-    name: id !== callee.id ? AcceptanceState.pending : AcceptanceState.accepted,
-    value: userMention(id),
-  }));
-  embed.setFields(fields);
+  embed.setAuthor(callee.username, callee.displayAvatarURL());
+  if (userIds.length > 0) {
+    embed.setDescription(`${bold(callee.username)} has mentioned you!`);
+    const fields: EmbedField[] = userIds.map((id) => ({
+      inline: true,
+      name:
+        id !== callee.id ? AcceptanceState.pending : AcceptanceState.accepted,
+      value: userMention(id),
+    }));
+    embed.setFields(fields);
+  } else {
+    embed.setDescription(
+      `${bold(callee.username)} has mentioned ${name}... but no one's in here.`
+    );
+  }
   embed.setFooter(
     formatMessage(
       'If you would like to be mentioned for this next time, click to subscribe below!',
