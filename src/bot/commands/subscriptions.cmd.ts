@@ -262,9 +262,9 @@ export class Subscriptions {
       const embed = new MessageEmbed();
       embed.setTitle(`${subscription.name}`);
       if (subscription.userIds.length === 0) {
-        components.push(mentionRow);
         embed.setDescription(`No one's in ${subscription.name} 😔`);
       } else {
+        components.push(mentionRow);
         embed.setDescription(
           `Subscribed users:\n${subscription.userIds
             .map((id) => userMention(id))
